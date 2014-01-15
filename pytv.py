@@ -1,4 +1,8 @@
 #!/usr/bin/python
+# pytv.py is a script that monitors a feed at showrss.info and feeds it into
+# a transmission server.  The config file should be ~/.config/pytv.ini
+
+ 
 import os
 import sys
 import traceback
@@ -10,16 +14,15 @@ import sqlite3
 import urllib2
 import logging
 import pprint
-logging.basicConfig(filename=os.path.expanduser("~/.config/pytv.log"))
-logger = logging.getLogger('transmissionrpc')
+
+logging.basicConfig(filename=os.path.expanduser("~/.config/pytv.log"), format='%(asctime)-15s %(message)s')
+logger = logging.getLogger('pytv')
 logger.setLevel(logging.INFO)
 
 config = ConfigParser.RawConfigParser()
 config.read(os.path.expanduser("~/.config/pytv.ini"))
 
 # rss feed for torrents, showrss.info at the moment
-
-# feed = dict(config.items('downloads'))['feed']
 feed = config.get('downloads', 'feed')
 ratio = config.getfloat('downloads','ratio')
 print feed
@@ -27,7 +30,7 @@ print ratio
 
 # feed = "test.xml"
 # database
-database_path  = os.path.expanduser("~/.config/pytv.db")
+database_path  = os.path.expanduser(config.get('db','path'))
 
 # torrent parameters
 status_new = {
@@ -50,7 +53,6 @@ status_old = {
 
 print status_new
 print status_old
-sys.exit(0)
 
 # tc = transmissionrpc.Client(rpc_hostname, port=rpc_port, user=rpc_username, password=rpc_password)
 tc = transmissionrpc.Client(**dict(config.items('transmission')))
@@ -100,13 +102,14 @@ def get_active_torrents():
         return res
         
 
-def get_torrent_history(conn):
+def get_torrent_history():
         """
         returns the list of all torrents ever downloaded ever
         torrents returned as list of tuples (guid, title)
         """
+        c = db.cursor()
         cmd=""" select * from torrents """
-        res=conn.execute(cmd)
+        res=c.execute(cmd)
         return res.fetchall()
         
 
@@ -144,11 +147,13 @@ def add_new_torrents(torrents):
         for torrent in torrents.entries:
                 # pprint.pprint(torrent)
                 hashString = ""
+                # pprint.pprint(torrent)
+                print torrent.title
                 if check_guid(torrent.guid):
-                        logger.info("Found %s" % torrent.guid)
+                        logger.info("Skipping (already processed): '%s'" % torrent.title)
                 else:
                         # new content, send to transmission
-                        logger.info("New: %s" % torrent.guid)
+                        logger.info("Adding as New: '%s'" % torrent.guid)
                         try:
                                 res = add_torrent(torrent)
                                 torrent_info = res.values()[0]
@@ -195,7 +200,7 @@ def cleanup_torrents():
                         tc.stop(torrent.id)
                         tc.remove(torrent.id)
                 else:
-                        logger.debug("keeping %s: %s" % (torrent.name, get_status(torrent)))
+                        logger.debug("Keeping %s: %s" % (torrent.name, get_status(torrent)))
                 
                 
 if __name__=='__main__':
@@ -209,3 +214,4 @@ if __name__=='__main__':
         sys.exit()
 
 
+        
