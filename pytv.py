@@ -14,6 +14,7 @@ import sqlite3
 import urllib2
 import logging
 import pprint
+from email.mime.text import MIMEText
 
 logging.basicConfig(filename=os.path.expanduser("~/.config/pytv.log"), format='%(asctime)-15s %(message)s')
 logger = logging.getLogger('pytv')
@@ -25,14 +26,15 @@ config.read(os.path.expanduser("~/.config/pytv.ini"))
 # rss feed for torrents, showrss.info at the moment
 feed = config.get('downloads', 'feed')
 ratio = config.getfloat('downloads','ratio')
-print feed
-print ratio
 
-# feed = "test.xml"
 # database
 database_path  = os.path.expanduser(config.get('db','path'))
 
+# notification details
+
 # torrent parameters
+# status_old is transmission RPC versions up to 14 (autodetected)
+# status_new is for later versions of transmission-daemon
 status_new = {
             0: 'stopped',
             1: 'check pending',
@@ -50,9 +52,6 @@ status_old = {
             (1<<3): 'seeding',
             (1<<4): 'stopped',
 }
-
-print status_new
-print status_old
 
 # tc = transmissionrpc.Client(rpc_hostname, port=rpc_port, user=rpc_username, password=rpc_password)
 tc = transmissionrpc.Client(**dict(config.items('transmission')))
@@ -197,15 +196,34 @@ def cleanup_torrents():
                 if get_status(torrent) in ['seeding','stopped','seed pending']:
                         # time to remove
                         logger.info( "Removing %s" % torrent.name)
+                        notify("Finished: %s" % torrent.name)
                         tc.stop(torrent.id)
                         tc.remove(torrent.id)
                 else:
                         logger.debug("Keeping %s: %s" % (torrent.name, get_status(torrent)))
-                
-                
+def notify(msg):
+        """
+        sends a notification via email
+        """
+        smtp_host = config.get("notify","smtp_host")
+        smtp_port = config.get("notify","smtp_port")
+        to_address = config.get("notify","to_address")
+        from_address = config.get("notify","from_address")
+
+        msg = MIMEText(msg)
+        msg['To'] = to_address
+        msg['From'] = from_address
+        msg['Subject'] = "[pytv] %s" (msg)
+        s = smtplib.SMTP(smtp_host, smtp_port)
+        s.sendmail(from_address, [to_address], msg.as_string())
+        s.quit()
+        
+
+
 if __name__=='__main__':
         # active_torrents = get_active_torrents()
         # grab torrents from the rss feed
+        notify("starting up")
         torrents = get_torrents()
         # add unknown torrents from the feed to the transmission daemon
         add_new_torrents(torrents)
