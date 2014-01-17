@@ -14,6 +14,7 @@ import sqlite3
 import urllib2
 import logging
 import pprint
+import smtplib
 from email.mime.text import MIMEText
 
 logging.basicConfig(filename=os.path.expanduser("~/.config/pytv.log"), format='%(asctime)-15s %(message)s')
@@ -147,7 +148,7 @@ def add_new_torrents(torrents):
                 # pprint.pprint(torrent)
                 hashString = ""
                 # pprint.pprint(torrent)
-                print torrent.title
+                # print torrent.title
                 if check_guid(torrent.guid):
                         logger.info("Skipping (already processed): '%s'" % torrent.title)
                 else:
@@ -185,6 +186,7 @@ def add_torrent(torrent):
         logger.debug( "Torrent ID: %s" % torrent_id )
         tc.change(torrent_id, seedRatioLimit=seed_ratio)
         res = tc.info(torrent_id)
+        notify("Added: %s" % torrent.name)
         return res 
 
 def cleanup_torrents():
@@ -210,12 +212,14 @@ def notify(msg):
         to_address = config.get("notify","to_address")
         from_address = config.get("notify","from_address")
 
-        msg = MIMEText(msg)
-        msg['To'] = to_address
-        msg['From'] = from_address
-        msg['Subject'] = "[pytv] %s" (msg)
+        body = MIMEText(msg)
+        body['To'] = to_address
+        body['From'] = from_address
+        body['Subject'] = "[pytv] %s" % (msg)
+        
+        
         s = smtplib.SMTP(smtp_host, smtp_port)
-        s.sendmail(from_address, [to_address], msg.as_string())
+        s.sendmail(from_address, [to_address], body.as_string())
         s.quit()
         
 
@@ -223,7 +227,6 @@ def notify(msg):
 if __name__=='__main__':
         # active_torrents = get_active_torrents()
         # grab torrents from the rss feed
-        notify("starting up")
         torrents = get_torrents()
         # add unknown torrents from the feed to the transmission daemon
         add_new_torrents(torrents)
