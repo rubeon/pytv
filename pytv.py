@@ -184,9 +184,10 @@ def add_torrent(torrent):
         torrent_id = torrent.keys()[0]
         logger.debug( "add_uri returned: %s" % torrent)
         logger.debug( "Torrent ID: %s" % torrent_id )
-        tc.change(torrent_id, seedRatioLimit=seed_ratio)
+        tc.change(torrent_id, seedRatioLimit=ratio)
         res = tc.info(torrent_id)
-        notify("Added: %s" % torrent.name)
+        notify("Added: %s" % torrent.get("name"))
+        print torrent
         return res 
 
 def cleanup_torrents():
@@ -199,8 +200,12 @@ def cleanup_torrents():
                         # time to remove
                         logger.info( "Removing %s" % torrent.name)
                         notify("Finished: %s" % torrent.name)
-                        tc.stop(torrent.id)
-                        tc.remove(torrent.id)
+                        try:
+                                tc.stop(torrent.id)
+                                tc.remove(torrent.id)
+                        except Exception, e:
+                                logger.warn("Received error: %s" % e.message)
+                                logger.debug(traceback.format_exc(e))
                 else:
                         logger.debug("Keeping %s: %s" % (torrent.name, get_status(torrent)))
 def notify(msg):
@@ -211,17 +216,23 @@ def notify(msg):
         smtp_port = config.get("notify","smtp_port")
         to_address = config.get("notify","to_address")
         from_address = config.get("notify","from_address")
-
-        body = MIMEText(msg)
-        body['To'] = to_address
-        body['From'] = from_address
-        body['Subject'] = "[pytv] %s" % (msg)
         
-        
-        s = smtplib.SMTP(smtp_host, smtp_port)
-        s.sendmail(from_address, [to_address], body.as_string())
-        s.quit()
-        
+        if to_address:
+                
+                body = MIMEText(msg)
+                body['To'] = to_address
+                body['From'] = from_address
+                body['Subject'] = "[pytv] %s" % (msg)
+                
+                
+                s = smtplib.SMTP(smtp_host, smtp_port)
+                s.sendmail(from_address, [to_address], body.as_string())
+                s.quit()
+                return True
+        else:
+                logger.warn("No to_address specified in config file, not sending notifications")
+                return False
+                
 
 
 if __name__=='__main__':
